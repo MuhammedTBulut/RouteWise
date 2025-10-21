@@ -1,18 +1,13 @@
-import 'dotenv/config';
+require('dotenv').config();
 
-export default {
+module.exports = {
   expo: {
     name: "RouteWise",
     slug: "routewise",
     version: "1.0.0",
     orientation: "portrait",
-    icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
-    splash: {
-      image: "./assets/splash.png",
-      resizeMode: "contain",
-      backgroundColor: "#6366f1"
-    },
+    scheme: "routewise",
     assetBundlePatterns: [
       "**/*"
     ],
@@ -21,19 +16,10 @@ export default {
       bundleIdentifier: "com.routewise.app"
     },
     android: {
-      adaptiveIcon: {
-        foregroundImage: "./assets/adaptive-icon.png",
-        backgroundColor: "#6366f1"
-      },
       package: "com.routewise.app"
     },
-    web: {
-      favicon: "./assets/favicon.png"
-    },
+    web: {},
     extra: {
-      eas: {
-        projectId: "your-project-id"
-      },
       firebaseApiKey: process.env.FIREBASE_API_KEY,
       firebaseAuthDomain: process.env.FIREBASE_AUTH_DOMAIN,
       firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
@@ -42,6 +28,8 @@ export default {
       firebaseAppId: process.env.FIREBASE_APP_ID,
       firebaseMeasurementId: process.env.FIREBASE_MEASUREMENT_ID,
       googleWebClientId: process.env.GOOGLE_WEB_CLIENT_ID,
+      googleIosClientId: process.env.GOOGLE_IOS_CLIENT_ID,
+      googleAndroidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID,
       metaAppId: process.env.META_APP_ID,
       metaAppSecret: process.env.META_APP_SECRET
     }

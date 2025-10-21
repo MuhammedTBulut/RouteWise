@@ -7,9 +7,27 @@ services:
       POSTGRES_PASSWORD: routewisepass
       POSTGRES_DB: routewise
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    networks:
+      - routewise-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@routewise.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - routewise-network
+    depends_on:
+      - db
+
   backend:
     build: .
     working_dir: /app
@@ -19,6 +37,15 @@ services:
       - "8000:8000"
     depends_on:
       - db
+    networks:
+      - routewise-network
+
+networks:
+  routewise-network:
+    driver: bridge
+
 volumes:
   db_data:
+    driver: local
+  pgadmin_data:
     driver: local

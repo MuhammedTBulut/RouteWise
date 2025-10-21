@@ -4,7 +4,6 @@
  */
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import * as authService from '../services/authService';
 import { User, AuthContextType } from '../types/auth';
@@ -28,7 +27,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
       if (firebaseUser) {
         // Convert Firebase user to our User type
         const userData = authService.convertFirebaseUser(firebaseUser);
@@ -48,8 +47,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {
-    const userData = await authService.signUpWithEmail(email, password, displayName);
-    setUser(userData);
+    const userCredential = await authService.signUpWithEmail(email, password, displayName);
+    // DON'T set user here - let the screen handle it
+    // This prevents auto-navigation to Home screen
+    // setUser(userData);
+    return userCredential;
   };
 
   const signInWithGoogle = async () => {

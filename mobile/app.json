@@ -16,7 +16,8 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.routewise.app"
+      "bundleIdentifier": "com.routewise.app",
+      "scheme": "routewise"
     },
     "android": {
       "adaptiveIcon": {

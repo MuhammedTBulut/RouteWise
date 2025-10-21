@@ -9,19 +9,27 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { LoginScreen } from '../screens/LoginScreen';
 import { SignUpScreen } from '../screens/SignUpScreen';
+import { HomeScreen } from '../screens/HomeScreen';
+import { POIDetailScreen } from '../screens/POIDetailScreen';
+import { FavoritesScreen } from '../screens/FavoritesScreen';
+import WelcomeScreen from '../screens/WelcomeScreen';
+import PreferencesScreen from '../screens/PreferencesScreen';
+import LocationSelectionScreen from '../screens/LocationSelectionScreen';
 import { theme } from '../theme';
-import { ActivityIndicator, View, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
 
-const Stack = createNativeStackNavigator();
+export type RootStackParamList = {
+  Welcome: undefined;
+  Preferences: undefined;
+  LocationSelection: { preferences: any };
+  SignUp: { preferences?: any; city?: string; country?: string };
+  Login: undefined;
+  Home: undefined;
+  POIDetail: { poiId?: string; poi?: any };
+  Favorites: undefined;
+};
 
-// Temporary Home Screen placeholder
-const HomeScreen = () => (
-  <View style={styles.placeholder}>
-    <Text style={styles.placeholderText}>🗺️</Text>
-    <Text style={styles.placeholderTitle}>Welcome to RouteWise!</Text>
-    <Text style={styles.placeholderSubtitle}>Home screen coming soon...</Text>
-  </View>
-);
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const AppNavigator = () => {
   const { user, loading } = useAuth();
@@ -46,13 +54,18 @@ export const AppNavigator = () => {
           // Authenticated Stack
           <>
             <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="POIDetail" component={POIDetailScreen} />
+            <Stack.Screen name="Favorites" component={FavoritesScreen} />
             {/* Add more authenticated screens here */}
           </>
         ) : (
-          // Auth Stack
+          // Auth Stack - Onboarding Flow
           <>
-            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Welcome" component={WelcomeScreen} />
+            <Stack.Screen name="Preferences" component={PreferencesScreen} />
+            <Stack.Screen name="LocationSelection" component={LocationSelectionScreen} />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
+            <Stack.Screen name="Login" component={LoginScreen} />
           </>
         )}
       </Stack.Navigator>
@@ -66,24 +79,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-  },
-  placeholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: theme.spacing.xl,
-  },
-  placeholderText: {
-    fontSize: 80,
-    marginBottom: theme.spacing.lg,
-  },
-  placeholderTitle: {
-    ...theme.typography.h2,
-    color: theme.colors.primary,
-    marginBottom: theme.spacing.sm,
-  },
-  placeholderSubtitle: {
-    ...theme.typography.body,
-    color: theme.colors.textSecondary,
   },
 });

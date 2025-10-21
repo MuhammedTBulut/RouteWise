@@ -1,6 +1,6 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import firebase from 'firebase/app';
+import 'firebase/auth';
+import 'firebase/firestore';
 import Constants from 'expo-constants';
 
 // Firebase configuration from environment variables
@@ -14,18 +14,59 @@ const firebaseConfig = {
   measurementId: Constants.expoConfig?.extra?.firebaseMeasurementId || process.env.FIREBASE_MEASUREMENT_ID,
 };
 
-// Validate Firebase configuration
-if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-  throw new Error(
-    'Firebase configuration is missing. Please check your .env file and app.config.js'
-  );
+// Check if Firebase config is valid
+const isFirebaseConfigured = firebaseConfig.apiKey && firebaseConfig.projectId && 
+  firebaseConfig.apiKey !== 'undefined' && firebaseConfig.projectId !== 'undefined';
+
+console.log('🔥 Firebase Configuration Status:', isFirebaseConfigured ? 'Configured' : 'Not Configured');
+
+// Initialize Firebase only once
+if (!firebase.apps.length) {
+  if (isFirebaseConfigured) {
+    firebase.initializeApp(firebaseConfig);
+    console.log('✅ Firebase initialized successfully');
+  } else {
+    console.warn('⚠️  Firebase not configured. Please set up your .env file.');
+    console.warn('⚠️  App will run in demo mode without authentication.');
+    // Initialize with dummy config for development
+    firebase.initializeApp({
+      apiKey: 'AIzaSyDemoKey-DoNotUseInProduction',
+      authDomain: 'demo.firebaseapp.com',
+      projectId: 'demo-project-id',
+      storageBucket: 'demo.appspot.com',
+      messagingSenderId: '123456789',
+      appId: '1:123456789:web:abc123def456',
+    });
+  }
 }
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Export Firebase services
+export const auth = firebase.auth();
+export const db = firebase.firestore();
 
-// Initialize Firebase services
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Configure Firestore settings for React Native
+try {
+  db.settings({
+    cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
+  });
+  console.log('✅ Firestore cache configured');
+} catch (error) {
+  console.warn('⚠️  Firestore settings already configured');
+}
 
-export default app;
+// Disable persistence to avoid AsyncStorage issues on React Native
+auth.setPersistence(firebase.auth.Auth.Persistence.NONE).catch((error) => {
+  console.warn('⚠️  Could not disable Firebase Auth persistence:', error);
+});
+
+console.log('✅ Firebase Auth ready (persistence disabled)');
+console.log('✅ Firestore ready');
+console.log('');
+console.log('📌 ÖNEMLI: Firebase Console\'da Firestore Database oluşturmanız gerekiyor!');
+console.log('   1. https://console.firebase.google.com adresine gidin');
+console.log('   2. "route-project-ad117" projesini seçin');
+console.log('   3. Build > Firestore Database > Create database tıklayın');
+console.log('   4. Test mode\'da başlatın (geliştirme için)');
+console.log('');
+
+export default firebase;

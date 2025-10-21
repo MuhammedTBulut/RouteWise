@@ -1,6 +1,6 @@
 /**
  * Login Screen
- * Allows users to sign in with email/password, Google, or Apple
+ * Modern and minimalist design for user authentication
  */
 
 import React, { useState } from 'react';
@@ -8,20 +8,38 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Alert,
   TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { useAuth } from '../context/AuthContext';
+import { useGoogleAuth } from '../hooks/useGoogleAuth';
+import { useMetaAuth } from '../hooks/useMetaAuth';
 import { validateEmail, validatePassword } from '../utils/validation';
 import { theme } from '../theme';
 
 export const LoginScreen = ({ navigation }: any) => {
-  const { signIn, signInWithGoogle, signInWithMeta } = useAuth();
+  const { signIn } = useAuth();
+  
+  // Google OAuth hook
+  const { 
+    loading: googleLoading, 
+    error: googleError, 
+    signInWithGoogle 
+  } = useGoogleAuth();
+  
+  // Meta (Facebook) OAuth hook
+  const { 
+    loading: metaLoading, 
+    error: metaError, 
+    signInWithMeta 
+  } = useMetaAuth();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -33,10 +51,7 @@ export const LoginScreen = ({ navigation }: any) => {
     const passwordError = validatePassword(password);
 
     if (emailError || passwordError) {
-      setErrors({
-        email: emailError,
-        password: passwordError,
-      });
+      setErrors({ email: emailError, password: passwordError });
       return;
     }
 
@@ -45,33 +60,58 @@ export const LoginScreen = ({ navigation }: any) => {
 
     try {
       await signIn(email, password);
-      // Navigation will be handled automatically by auth state change
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message || 'An error occurred');
+      console.log('Login error:', error);
+      
+      // Firebase hata mesajlarını Türkçe'ye çevir
+      let errorMessage = 'Bir hata oluştu. Lütfen tekrar deneyin.';
+      
+      if (error.message.includes('INVALID_LOGIN_CREDENTIALS') || 
+          error.message.includes('invalid-credential') ||
+          error.message.includes('wrong-password') ||
+          error.message.includes('user-not-found')) {
+        errorMessage = 'E-posta veya şifre hatalı. Lütfen kontrol edip tekrar deneyin.\n\nHenüz hesabınız yoksa "Kayıt Ol" butonuna tıklayın.';
+      } else if (error.message.includes('invalid-email')) {
+        errorMessage = 'Geçersiz e-posta adresi.';
+      } else if (error.message.includes('user-disabled')) {
+        errorMessage = 'Bu hesap devre dışı bırakılmış.';
+      } else if (error.message.includes('too-many-requests')) {
+        errorMessage = 'Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.';
+      } else if (error.message.includes('network')) {
+        errorMessage = 'İnternet bağlantınızı kontrol edin.';
+      }
+      
+      Alert.alert('Giriş Yapılamadı', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleSignIn = async () => {
     try {
-      setLoading(true);
+      console.log('🔵 Google Sign-In button pressed');
       await signInWithGoogle();
     } catch (error: any) {
-      Alert.alert('Google Login Failed', error.message || 'An error occurred');
-    } finally {
-      setLoading(false);
+      console.error('❌ Google Sign-In error:', error);
+      Alert.alert(
+        'Google ile Giriş',
+        error.message || googleError || 'Bir hata oluştu',
+        [{ text: 'Tamam', style: 'default' }]
+      );
     }
   };
 
-  const handleMetaLogin = async () => {
+  const handleMetaSignIn = async () => {
     try {
-      setLoading(true);
+      console.log('🔵 Meta Sign-In button pressed');
       await signInWithMeta();
     } catch (error: any) {
-      Alert.alert('Meta Login Failed', error.message || 'An error occurred');
-    } finally {
-      setLoading(false);
+      console.error('❌ Meta Sign-In error:', error);
+      Alert.alert(
+        'Meta ile Giriş',
+        error.message || metaError || 'Bir hata oluştu',
+        [{ text: 'Tamam', style: 'default' }]
+      );
     }
   };
 
@@ -83,49 +123,48 @@ export const LoginScreen = ({ navigation }: any) => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.logo}>🗺️</Text>
-          <Text style={styles.title}>RouteWise</Text>
-          <Text style={styles.subtitle}>Plan your perfect journey</Text>
+          <View style={styles.logoContainer}>
+            <Text style={styles.logo}>🗺️</Text>
+          </View>
+          <Text style={styles.title}>Hoş Geldiniz</Text>
+          <Text style={styles.subtitle}>RouteWise'a giriş yapın</Text>
         </View>
 
-        {/* Form */}
+        {/* Email/Password Form */}
         <View style={styles.form}>
           <Input
-            label="Email"
-            placeholder="Enter your email"
+            label="E-posta"
+            placeholder="ornek@mail.com"
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
             value={email}
             onChangeText={setEmail}
             error={errors.email}
-            leftIcon={<Text style={styles.icon}>📧</Text>}
           />
 
           <Input
-            label="Password"
-            placeholder="Enter your password"
+            label="Şifre"
+            placeholder="••••••••"
             secureTextEntry
             autoCapitalize="none"
             autoComplete="password"
             value={password}
             onChangeText={setPassword}
             error={errors.password}
-            leftIcon={<Text style={styles.icon}>🔒</Text>}
           />
 
-          <TouchableOpacity
-            style={styles.forgotPassword}
-            onPress={() => navigation.navigate('ForgotPassword')}
-          >
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+          {/* Forgot Password */}
+          <TouchableOpacity style={styles.forgotPassword}>
+            <Text style={styles.forgotPasswordText}>Şifremi Unuttum?</Text>
           </TouchableOpacity>
 
           <Button
-            title="Login"
+            title="Giriş Yap"
             onPress={handleLogin}
             loading={loading}
             style={styles.loginButton}
@@ -135,34 +174,49 @@ export const LoginScreen = ({ navigation }: any) => {
         {/* Divider */}
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>OR</Text>
+          <Text style={styles.dividerText}>veya</Text>
           <View style={styles.dividerLine} />
         </View>
 
-        {/* Social Login */}
-        <View style={styles.socialButtons}>
-          <Button
-            title="Continue with Google"
-            onPress={handleGoogleLogin}
-            variant="outline"
-            style={styles.socialButton}
-            textStyle={styles.socialButtonText}
-          />
+        {/* Google OAuth Button */}
+        <TouchableOpacity
+          style={styles.googleButton}
+          onPress={handleGoogleSignIn}
+          disabled={googleLoading || loading}
+          activeOpacity={0.7}
+        >
+          {googleLoading ? (
+            <ActivityIndicator color="#4285F4" />
+          ) : (
+            <>
+              <Text style={styles.googleIcon}>🔵</Text>
+              <Text style={styles.googleButtonText}>Google ile Giriş Yap</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
-          <Button
-            title="Continue with Meta"
-            onPress={handleMetaLogin}
-            variant="outline"
-            style={styles.socialButton}
-            textStyle={styles.socialButtonText}
-          />
-        </View>
+        {/* Meta (Facebook) Sign In Button */}
+        <TouchableOpacity 
+          style={styles.metaButton}
+          onPress={handleMetaSignIn}
+          disabled={metaLoading || loading}
+          activeOpacity={0.7}
+        >
+          {metaLoading ? (
+            <ActivityIndicator color="#1877F2" />
+          ) : (
+            <>
+              <Text style={styles.metaIcon}>📘</Text>
+              <Text style={styles.metaButtonText}>Meta ile Giriş Yap</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
         {/* Sign Up Link */}
         <View style={styles.signupContainer}>
-          <Text style={styles.signupText}>Don't have an account? </Text>
+          <Text style={styles.signupText}>Hesabınız yok mu? </Text>
           <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-            <Text style={styles.signupLink}>Sign Up</Text>
+            <Text style={styles.signupLink}>Kayıt Ol</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -173,86 +227,152 @@ export const LoginScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#F9FAFB',
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xxl,
-    paddingBottom: theme.spacing.lg,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 40,
   },
   header: {
+    marginBottom: 48,
     alignItems: 'center',
-    marginBottom: theme.spacing.xl,
+  },
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
   logo: {
-    fontSize: 64,
-    marginBottom: theme.spacing.sm,
+    fontSize: 40,
   },
   title: {
-    ...theme.typography.h1,
-    color: theme.colors.primary,
-    marginBottom: theme.spacing.xs,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 8,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    ...theme.typography.body,
-    color: theme.colors.textSecondary,
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '400',
   },
   form: {
-    marginBottom: theme.spacing.lg,
-  },
-  icon: {
-    fontSize: 20,
+    gap: 16,
+    marginBottom: 28,
   },
   forgotPassword: {
     alignSelf: 'flex-end',
-    marginBottom: theme.spacing.md,
+    marginTop: -8,
   },
   forgotPasswordText: {
-    ...theme.typography.bodySmall,
-    color: theme.colors.primary,
+    fontSize: 14,
+    color: '#6366F1',
     fontWeight: '600',
   },
   loginButton: {
-    marginTop: theme.spacing.sm,
+    marginTop: 12,
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: theme.spacing.lg,
+    marginVertical: 28,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: theme.colors.border,
+    backgroundColor: '#E5E7EB',
   },
   dividerText: {
-    ...theme.typography.bodySmall,
-    color: theme.colors.textSecondary,
-    marginHorizontal: theme.spacing.md,
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginHorizontal: 16,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  socialButtons: {
-    gap: theme.spacing.md,
+
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  socialButton: {
-    backgroundColor: '#ffffff',
+  googleIcon: {
+    fontSize: 20,
   },
-  socialButtonText: {
-    color: theme.colors.text,
+  googleButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  metaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 12,
+    marginTop: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  metaIcon: {
+    fontSize: 20,
+  },
+  metaButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
   },
   signupContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: theme.spacing.xl,
+    marginTop: 24,
   },
   signupText: {
-    ...theme.typography.body,
-    color: theme.colors.textSecondary,
+    fontSize: 15,
+    color: '#6B7280',
+    fontWeight: '400',
   },
   signupLink: {
-    ...theme.typography.body,
-    color: theme.colors.primary,
-    fontWeight: '600',
+    fontSize: 15,
+    color: '#6366F1',
+    fontWeight: '700',
   },
 });

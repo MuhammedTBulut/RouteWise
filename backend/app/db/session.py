@@ -1,9 +1,38 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+"""
+Database session management
+"""
+
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-import os
+from app.core.config import settings
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://routewise:routewisepass@db:5432/routewise")
+# Create database engine
+if settings.DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        settings.DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        future=True,
+    )
+else:
+    engine = create_engine(
+        settings.DATABASE_URL,
+        pool_pre_ping=True,  # Verify connections before using
+        pool_size=10,
+        max_overflow=20,
+        future=True,
+    )
 
-engine = create_async_engine(DATABASE_URL, echo=True)
+# Create session factory
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+def get_db():
+    """
+    Dependency for getting database session
+    FastAPI dependency injection için
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

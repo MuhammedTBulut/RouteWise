@@ -13,10 +13,13 @@ import {
   Platform,
   Alert,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { useAuth } from '../context/AuthContext';
+import { useGoogleAuth } from '../hooks/useGoogleAuth';
+import { useMetaAuth } from '../hooks/useMetaAuth';
 import {
   validateEmail,
   validatePassword,
@@ -24,9 +27,29 @@ import {
   validateConfirmPassword,
 } from '../utils/validation';
 import { theme } from '../theme';
+import { preferencesAPI, userAPI } from '../services/api';
 
-export const SignUpScreen = ({ navigation }: any) => {
-  const { signUp, signInWithGoogle, signInWithMeta } = useAuth();
+export const SignUpScreen = ({ navigation, route }: any) => {
+  const { signUp, signOut, user } = useAuth();
+  
+  // Google OAuth hook
+  const { 
+    loading: googleLoading, 
+    error: googleError, 
+    signInWithGoogle 
+  } = useGoogleAuth();
+  
+  // Meta (Facebook) OAuth hook
+  const { 
+    loading: metaLoading, 
+    error: metaError, 
+    signInWithMeta 
+  } = useMetaAuth();
+  
+  // Get preferences and location from previous screens
+  const preferences = route.params?.preferences || {};
+  const city = route.params?.city || '';
+  const country = route.params?.country || 'Türkiye';
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -60,34 +83,131 @@ export const SignUpScreen = ({ navigation }: any) => {
     setLoading(true);
 
     try {
-      await signUp(email, password, displayName);
-      // Navigation will be handled automatically by auth state change
-    } catch (error: any) {
-      Alert.alert('Sign Up Failed', error.message || 'An error occurred');
-    } finally {
+      console.log('🚀 Starting sign up process...');
+      console.log('📧 Email:', email);
+      console.log('👤 Display Name:', displayName);
+      console.log('📍 Location:', city, country);
+      console.log('🎯 Preferences:', preferences);
+      
+      // 1. Register user with Firebase
+      console.log('1️⃣ Registering with Firebase...');
+      const userCredential = await signUp(email, password, displayName);
+      const firebaseUid = userCredential?.user?.uid;
+      
+      console.log('✅ Firebase registration successful. UID:', firebaseUid);
+      
+      if (firebaseUid) {
+        try {
+          // 2. Create user in backend database with location
+          console.log('2️⃣ Creating user in backend...');
+          await userAPI.create({
+            firebase_uid: firebaseUid,
+            email: email,
+            display_name: displayName,
+            city: city,
+            country: country,
+          });
+          console.log('✅ User created in backend');
+          
+          // 3. Save user preferences to backend
+          if (Object.keys(preferences).length > 0) {
+            console.log('3️⃣ Saving preferences...');
+            await preferencesAPI.save(firebaseUid, {
+              ...preferences,
+              budget_level: 'medium',
+              pace: 'moderate',
+              group_size: 'small',
+            });
+            console.log('✅ Preferences saved');
+          }
+          
+          console.log('✅ User and preferences saved to backend!');
+        } catch (backendError) {
+          console.error('❌ Backend save error:', backendError);
+          // Continue anyway - user is registered in Firebase
+        }
+      }
+      
+      // Clear form after successful registration
+      setDisplayName('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      
+      // Immediately sign out to prevent auto-navigation
+      console.log('4️⃣ Signing out to prevent auto-navigation...');
+      await signOut();
+      
+      // Force loading to stop
       setLoading(false);
+      
+      // Show success message
+      Alert.alert(
+        'Kayıt Başarılı! 🎉',
+        `Hesabınız başarıyla oluşturuldu.\n\n📍 Konum: ${city}, ${country}\n🎯 Tercihleriniz kaydedildi!\n\nŞimdi giriş yapabilirsiniz.`,
+        [{ 
+          text: 'Giriş Yap', 
+          onPress: () => {
+            // Navigation will happen automatically when user is signed out
+            // The Welcome screen will show and user can navigate to Login
+          }
+        }]
+      );
+      
+    } catch (error: any) {
+      setLoading(false);
+      console.error('❌ SignUp error:', error);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error code:', error.code);
+      
+      // Firebase hata mesajlarını Türkçe'ye çevir
+      let errorMessage = 'Bir hata oluştu. Lütfen tekrar deneyin.';
+      
+      if (error.code === 'auth/email-already-in-use' || error.message.includes('email-already-in-use')) {
+        errorMessage = 'Bu e-posta adresi zaten kullanımda.\n\nGiriş yapmayı deneyin veya şifrenizi sıfırlayın.';
+      } else if (error.code === 'auth/invalid-email' || error.message.includes('invalid-email')) {
+        errorMessage = 'Geçersiz e-posta adresi.';
+      } else if (error.code === 'auth/weak-password' || error.message.includes('weak-password')) {
+        errorMessage = 'Şifre çok zayıf. En az 6 karakter olmalıdır.';
+      } else if (error.message.includes('network') || error.message.includes('unavailable')) {
+        errorMessage = 'İnternet bağlantısı sorunu.\n\n⚠️ Firebase bağlantısı kurulamadı.\nLütfen internet bağlantınızı kontrol edin.';
+      } else if (error.message.includes('firestore') || error.message.includes('cloud')) {
+        errorMessage = '⚠️ Veritabanı henüz hazır değil.\n\nLütfen Firebase Console\'dan Firestore Database\'i oluşturun ve test modunda başlatın.\n\nSonra tekrar deneyin.';
+      }
+      
+      Alert.alert(
+        'Kayıt Yapılamadı',
+        errorMessage,
+        [{ text: 'Tamam', style: 'default' }]
+      );
     }
   };
 
   const handleGoogleSignUp = async () => {
     try {
-      setLoading(true);
+      console.log('🔵 Google Sign-Up button pressed');
       await signInWithGoogle();
     } catch (error: any) {
-      Alert.alert('Google Sign Up Failed', error.message || 'An error occurred');
-    } finally {
-      setLoading(false);
+      console.error('❌ Google Sign-Up error:', error);
+      Alert.alert(
+        'Google ile Kayıt Ol',
+        error.message || googleError || 'Bir hata oluştu',
+        [{ text: 'Tamam', style: 'default' }]
+      );
     }
   };
 
   const handleMetaSignUp = async () => {
     try {
-      setLoading(true);
+      console.log('🔵 Meta Sign-Up button pressed');
       await signInWithMeta();
     } catch (error: any) {
-      Alert.alert('Meta Sign Up Failed', error.message || 'An error occurred');
-    } finally {
-      setLoading(false);
+      console.error('❌ Meta Sign-Up error:', error);
+      Alert.alert(
+        'Meta ile Kayıt Ol',
+        error.message || metaError || 'Bir hata oluştu',
+        [{ text: 'Tamam', style: 'default' }]
+      );
     }
   };
 
@@ -103,76 +223,103 @@ export const SignUpScreen = ({ navigation }: any) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Start your journey with RouteWise</Text>
+          <View style={styles.logoContainer}>
+            <Text style={styles.logo}>🗺️</Text>
+          </View>
+          <Text style={styles.title}>Hesap Oluştur</Text>
+          <Text style={styles.subtitle}>RouteWise'a katılın</Text>
         </View>
+
+        {/* Progress */}
+        {(city || Object.keys(preferences).length > 0) && (
+          <View style={styles.progressContainer}>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: '100%' }]} />
+            </View>
+            <Text style={styles.progressText}>Adım 3/3 - Son Adım!</Text>
+          </View>
+        )}
+
+        {/* Preview of selections */}
+        {city && (
+          <View style={styles.previewCard}>
+            <Text style={styles.previewTitle}>📍 Seçilen Konum</Text>
+            <Text style={styles.previewText}>{city}, {country}</Text>
+          </View>
+        )}
+
+        {Object.keys(preferences).length > 0 && (
+          <View style={styles.previewCard}>
+            <Text style={styles.previewTitle}>🎯 Tercihleriniz Hazır</Text>
+            <Text style={styles.previewText}>
+              {Object.entries(preferences)
+                .sort(([, a], [, b]) => (b as number) - (a as number))
+                .slice(0, 3)
+                .map(([key]) => {
+                  const labels: any = {
+                    culture: 'Kültür',
+                    nightlife: 'Gece Hayatı',
+                    shopping: 'Alışveriş',
+                    nature: 'Doğa',
+                    food: 'Yemek',
+                    sports: 'Spor',
+                    history: 'Tarih',
+                    entertainment: 'Eğlence',
+                  };
+                  return labels[key];
+                })
+                .join(', ')}
+            </Text>
+          </View>
+        )}
 
         {/* Form */}
         <View style={styles.form}>
           <Input
-            label="Full Name"
-            placeholder="Enter your full name"
+            label="Ad Soyad"
+            placeholder="Adınızı girin"
             autoCapitalize="words"
             autoComplete="name"
             value={displayName}
             onChangeText={setDisplayName}
             error={errors.displayName}
-            leftIcon={<Text style={styles.icon}>👤</Text>}
           />
 
           <Input
-            label="Email"
-            placeholder="Enter your email"
+            label="E-posta"
+            placeholder="ornek@mail.com"
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
             value={email}
             onChangeText={setEmail}
             error={errors.email}
-            leftIcon={<Text style={styles.icon}>📧</Text>}
           />
 
           <Input
-            label="Password"
-            placeholder="Create a password"
+            label="Şifre"
+            placeholder="Şifrenizi oluşturun"
             secureTextEntry
             autoCapitalize="none"
             autoComplete="password-new"
             value={password}
             onChangeText={setPassword}
             error={errors.password}
-            leftIcon={<Text style={styles.icon}>🔒</Text>}
           />
 
           <Input
-            label="Confirm Password"
-            placeholder="Re-enter your password"
+            label="Şifre Tekrar"
+            placeholder="Şifrenizi tekrar girin"
             secureTextEntry
             autoCapitalize="none"
             autoComplete="password-new"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             error={errors.confirmPassword}
-            leftIcon={<Text style={styles.icon}>🔒</Text>}
           />
 
-          {/* Password Requirements */}
-          <View style={styles.requirements}>
-            <Text style={styles.requirementsTitle}>Password must contain:</Text>
-            <Text style={styles.requirementItem}>• At least 8 characters</Text>
-            <Text style={styles.requirementItem}>• One uppercase letter</Text>
-            <Text style={styles.requirementItem}>• One lowercase letter</Text>
-            <Text style={styles.requirementItem}>• One number</Text>
-          </View>
-
           <Button
-            title="Sign Up"
+            title="Kayıt Ol"
             onPress={handleSignUp}
             loading={loading}
             style={styles.signUpButton}
@@ -182,43 +329,58 @@ export const SignUpScreen = ({ navigation }: any) => {
         {/* Divider */}
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>OR</Text>
+          <Text style={styles.dividerText}>veya</Text>
           <View style={styles.dividerLine} />
         </View>
 
-        {/* Social Sign Up */}
-        <View style={styles.socialButtons}>
-          <Button
-            title="Continue with Google"
-            onPress={handleGoogleSignUp}
-            variant="outline"
-            style={styles.socialButton}
-            textStyle={styles.socialButtonText}
-          />
+        {/* Google Sign Up Button */}
+        <TouchableOpacity 
+          style={styles.googleButton}
+          onPress={handleGoogleSignUp}
+          disabled={googleLoading || loading}
+          activeOpacity={0.7}
+        >
+          {googleLoading ? (
+            <ActivityIndicator color="#4285F4" />
+          ) : (
+            <>
+              <Text style={styles.googleIcon}>🔵</Text>
+              <Text style={styles.googleButtonText}>Google ile Kayıt Ol</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
-          <Button
-            title="Continue with Meta"
-            onPress={handleMetaSignUp}
-            variant="outline"
-            style={styles.socialButton}
-            textStyle={styles.socialButtonText}
-          />
-        </View>
+        {/* Meta (Facebook) Sign Up Button */}
+        <TouchableOpacity 
+          style={styles.metaButton}
+          onPress={handleMetaSignUp}
+          disabled={metaLoading || loading}
+          activeOpacity={0.7}
+        >
+          {metaLoading ? (
+            <ActivityIndicator color="#1877F2" />
+          ) : (
+            <>
+              <Text style={styles.metaIcon}>📘</Text>
+              <Text style={styles.metaButtonText}>Meta ile Kayıt Ol</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
         {/* Login Link */}
         <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>Already have an account? </Text>
+          <Text style={styles.loginText}>Zaten hesabınız var mı? </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.loginLink}>Login</Text>
+            <Text style={styles.loginLink}>Giriş Yap</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Terms */}
-        <Text style={styles.terms}>
-          By signing up, you agree to our{' '}
-          <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-          <Text style={styles.termsLink}>Privacy Policy</Text>
-        </Text>
+        {/* OAuth Coming Soon Notice */}
+        <View style={styles.oauthNotice}>
+          <Text style={styles.oauthNoticeText}>
+            💡 Google ve Meta ile kayıt yakında eklenecek
+          </Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -227,107 +389,199 @@ export const SignUpScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#F9FAFB',
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
-    paddingBottom: theme.spacing.lg,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 40,
   },
   header: {
-    marginBottom: theme.spacing.xl,
+    marginBottom: 48,
+    alignItems: 'center',
   },
-  backButton: {
-    marginBottom: theme.spacing.md,
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  backButtonText: {
-    ...theme.typography.body,
-    color: theme.colors.primary,
-    fontWeight: '600',
+  logo: {
+    fontSize: 40,
   },
   title: {
-    ...theme.typography.h1,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 8,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    ...theme.typography.body,
-    color: theme.colors.textSecondary,
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '400',
   },
   form: {
-    marginBottom: theme.spacing.lg,
-  },
-  icon: {
-    fontSize: 20,
-  },
-  requirements: {
-    backgroundColor: theme.colors.surface,
-    padding: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
-    marginBottom: theme.spacing.md,
-  },
-  requirementsTitle: {
-    ...theme.typography.bodySmall,
-    color: theme.colors.text,
-    fontWeight: '600',
-    marginBottom: theme.spacing.xs,
-  },
-  requirementItem: {
-    ...theme.typography.caption,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
+    gap: 16,
+    marginBottom: 28,
   },
   signUpButton: {
-    marginTop: theme.spacing.sm,
+    marginTop: 12,
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: theme.spacing.lg,
+    marginVertical: 28,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: theme.colors.border,
+    backgroundColor: '#E5E7EB',
   },
   dividerText: {
-    ...theme.typography.bodySmall,
-    color: theme.colors.textSecondary,
-    marginHorizontal: theme.spacing.md,
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginHorizontal: 16,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  socialButtons: {
-    gap: theme.spacing.md,
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  socialButton: {
-    backgroundColor: '#ffffff',
+  googleIcon: {
+    fontSize: 20,
   },
-  socialButtonText: {
-    color: theme.colors.text,
+  googleButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  metaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 12,
+    marginTop: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  metaIcon: {
+    fontSize: 20,
+  },
+  metaButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#374151',
   },
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: theme.spacing.xl,
+    marginTop: 24,
   },
   loginText: {
-    ...theme.typography.body,
-    color: theme.colors.textSecondary,
+    fontSize: 15,
+    color: '#6B7280',
+    fontWeight: '400',
   },
   loginLink: {
-    ...theme.typography.body,
-    color: theme.colors.primary,
-    fontWeight: '600',
+    fontSize: 15,
+    color: '#6366F1',
+    fontWeight: '700',
   },
-  terms: {
-    ...theme.typography.caption,
-    color: theme.colors.textSecondary,
+  oauthNotice: {
+    marginTop: 32,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  oauthNoticeText: {
+    fontSize: 13,
+    color: '#92400E',
+    fontWeight: '500',
     textAlign: 'center',
-    marginTop: theme.spacing.md,
   },
-  termsLink: {
-    color: theme.colors.primary,
+  progressContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
     fontWeight: '600',
+  },
+  previewCard: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#007AFF',
+    borderStyle: 'dashed',
+  },
+  previewTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginBottom: 6,
+  },
+  previewText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
   },
 });
